@@ -23,7 +23,7 @@ Windows Registry Editor Version 5.00
 [HKEY_LOCAL_MACHINE\SOFTWARE\Classes\bftracks\shell\open]
 
 [HKEY_LOCAL_MACHINE\SOFTWARE\Classes\bftracks\shell\open\command]
-@="\"C:\\Program Files (x86)\\Origin Games\\Battlefield 1942\\BF1942.exe\" \"+joinServer %1\""
+@="\"D:\git\bftracks-launcher\target\release\bftracks-launcher.exe\"" \"%1\""
 
 
 
@@ -89,10 +89,12 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 
     { 
+        // TODO: First time install
         let msg = format!("Do first time install?");
         show_message_box(&msg).unwrap();
         exit(1); 
     }
+
     let current_dir = Path::new(&args[0]).parent().unwrap();
     let server = match parse_url(&args[1])
     {
@@ -108,12 +110,12 @@ fn main() {
     let config_file = current_dir.join("config.toml");
     if !config_file.exists()
     {
+        // TODO: Playing around with dialog boxes, needs to be in a different place
         let params = DialogParams {
         file_types: vec![("Executable Files", "BF1942.exe")],
         default_extension: "exe",
         default_folder: r"C:\Program Files (x86)\Origin Games\Battlefield 1942",
         file_name: "BF1942.exe",
-        //file_name_label: "Select BF1942 executable",
         ok_button_label: "Select",
         options: FOS_FILEMUSTEXIST | FOS_HIDEMRUPLACES | FOS_HIDEPINNEDPLACES |FOS_DONTADDTORECENT,
         title: "BFTracks launcher",
@@ -179,6 +181,7 @@ fn main() {
             exit(1);
         }
     };
+
     let timeout = Duration::from_secs(10);
     match child.wait_timeout(timeout).unwrap() {
         Some(_) => (),
