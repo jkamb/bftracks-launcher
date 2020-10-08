@@ -15,5 +15,7 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+    - name: Setup toolchain
+      run: rustup target add i686-pc-windows-msvc
     - name: Build release
       run: cargo build --target=i686-pc-windows-msvc --release
