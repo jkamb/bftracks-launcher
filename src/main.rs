@@ -3,39 +3,16 @@ use std::env;
 use std::process::{exit,Command};
 use std::path::Path;
 use std::fs;
+use std::io;
 use std::time::Duration;
-use std::io::Error;
+use std::error;
 use url::{Url, ParseError};
-use serde_derive::{Serialize, Deserialize};
-use wfd::{DialogParams, DialogError, FOS_FILEMUSTEXIST, FOS_HIDEMRUPLACES, FOS_HIDEPINNEDPLACES, FOS_DONTADDTORECENT};
+
+mod install;
+mod config;
 
 use wait_timeout::ChildExt;
 
-/*
-Windows Registry Editor Version 5.00
-
-[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\bftracks]
-@="BFTracks Launcher"
-"URL Protocol"=""
-
-[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\bftracks\shell]
-
-[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\bftracks\shell\open]
-
-[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\bftracks\shell\open\command]
-@="\"D:\git\bftracks-launcher\target\release\bftracks-launcher.exe\"" \"%1\""
-
-
-
-Computer\HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Origin\Battlefield 1942
-*/
-
-#[derive(Serialize, Deserialize)]
-struct Config
-{
-    #[serde(rename = "GamePath")]
-    game_path: String
-}
 
 fn parse_url(arg: &str) -> Result<String, ParseError>
 {
@@ -63,7 +40,7 @@ fn to_wstring(value: &str) -> Vec<u16> {
         .collect()
 }
 
-fn show_message_box(message: &str) -> Result<i32, Error>
+fn show_message_box(message: &str) -> Result<i32, io::Error>
 {
     use std::ptr::null_mut;
     use winapi::um::winuser::{MessageBoxW, MB_ICONINFORMATION, MB_OK};
@@ -79,112 +56,69 @@ fn show_message_box(message: &str) -> Result<i32, Error>
         )
     };
     if ret == 0 {
-        Err(Error::last_os_error())
+        Err(io::Error::last_os_error())
     } else {
         Ok(ret)
     }
 }
 
-fn main() {
-    let args: Vec<String> = env::args().collect();
-    if args.len() < 2 
-    { 
-        // TODO: First time install
-        let msg = format!("Do first time install?");
-        show_message_box(&msg).unwrap();
-        exit(1); 
-    }
+fn run(config_file: &Path, server_address: &str) -> Result<(), Box<dyn error::Error>>
+{
+    use config::Config;
 
-    let current_dir = Path::new(&args[0]).parent().unwrap();
-    let server = match parse_url(&args[1])
-    {
-        Ok(server) => server,
-        Err(err) =>
-        {
-            let msg = format!("Error parsing URL: {}", err);
-            show_message_box(&msg).unwrap();
-            exit(1);
-        } 
-    };
-
-    let config_file = current_dir.join("config.toml");
-    if !config_file.exists()
-    {
-        // TODO: Playing around with dialog boxes, needs to be in a different place
-        let params = DialogParams {
-        file_types: vec![("Executable Files", "BF1942.exe")],
-        default_extension: "exe",
-        default_folder: r"C:\Program Files (x86)\Origin Games\Battlefield 1942",
-        file_name: "BF1942.exe",
-        ok_button_label: "Select",
-        options: FOS_FILEMUSTEXIST | FOS_HIDEMRUPLACES | FOS_HIDEPINNEDPLACES |FOS_DONTADDTORECENT,
-        title: "BFTracks launcher",
-        .. Default::default()
-    };
-
-    match wfd::open_dialog(params) {
-        Ok(r) => {
-            for file in r.selected_file_paths {
-                println!("{}", file.to_str().unwrap());
-            }
-        }
-        Err(e) => match e {
-            DialogError::UserCancelled => {
-                println!("User cancelled dialog");
-                exit(0);
-            }
-            DialogError::HResultFailed { hresult, error_method } => {
-                println!("HResult Failed - HRESULT: {:X}, Method: {}", hresult, error_method);
-                exit(1);
-            }
-        },
-    }
-
-    }
-    let config : Config = match fs::read_to_string(config_file.as_os_str())
-    {
-        Ok(contents) => 
-        {
-            match toml::from_str(&contents)
-            {
-                Ok(config) => config,
-                Err(err) => 
-                {
-                    let msg = format!("Error reading config: {}", err);
-                    show_message_box(&msg).unwrap();
-                    exit(1);
-                }
-            }
-        },
-        Err(err) => 
-        {
-            let msg = format!("Error reading config: {}", err);
-            show_message_box(&msg).unwrap();
-            exit(1);
-        }
-    };
-
+    let config = fs::read_to_string(config_file.as_os_str())?;
+    let config : Config = toml::from_str(&config)?;
     let game_path = Path::new(&config.game_path);
-    let mut child = match Command::new(game_path)
+    let mut child = Command::new(game_path)
     .arg("+restart")
     .arg("1")
     .arg("+joinServer")
-    .arg(format!("{}", server))
+    .arg(format!("{}", server_address))
     .current_dir(game_path.parent().unwrap())
-    .spawn()
-    {
-        Ok(child) => child,
-        Err(err) =>
-        {
-            let msg = format!("Error launching game: {}", err);
-            show_message_box(&msg).unwrap();
-            exit(1);
-        }
-    };
+    .spawn()?;
 
     let timeout = Duration::from_secs(10);
-    match child.wait_timeout(timeout).unwrap() {
-        Some(_) => (),
-        None => ()
-    };
+    child.wait_timeout(timeout)?;
+    Ok(())
+}
+
+fn main() {
+    let args: Vec<String> = env::args().collect();
+    let current_executable = Path::new(&args[0]);
+    if args.len() < 2 
+    { 
+        show_message_box(&format!("Starting first time install")).unwrap();
+        match install::install(&current_executable)
+        {
+            Ok(_) => show_message_box("Install successful!").unwrap(),
+            Err(err) =>
+            {
+                show_message_box(&format!("Install error: {}", err)).unwrap();
+                exit(1);
+            }
+        };
+        ()
+    }
+    else
+    {
+        let current_dir = current_executable.parent().unwrap();
+        let config_file = current_dir.join("config.toml");
+        let server = match parse_url(&args[1])
+        {
+            Ok(server) => server,
+            Err(err) =>
+            {
+                show_message_box(&format!("Error parsing URL: {}", err)).unwrap();
+                exit(1);
+            } 
+        };
+        match run(&config_file, &server)
+        {
+            Ok(_) => (),
+            Err(err) =>
+            {
+                show_message_box(&(*err).to_string()).unwrap();
+            }
+        }
+    }
 }

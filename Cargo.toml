@@ -14,7 +14,8 @@ OriginalFileName = "bftracks-launcher.exe"
 
 [dependencies]
 url = "2.1.1" 
-winapi = { version = "0.3.9", features = ["winreg", "winuser"] } 
+winapi = { version = "0.3.9", features = ["winbase", "winuser", "shlobj", "combaseapi", "knownfolders"] }
+winreg = "0.7.0"
 wfd = "0.1.4"
 wait-timeout = "0.2.0"
 toml = "0.5.6"
