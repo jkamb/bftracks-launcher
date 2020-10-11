@@ -79,7 +79,7 @@ fn run(config_file: &Path, server_address: &str) -> Result<(), Box<dyn error::Er
     .arg("+restart")
     .arg("1")
     .arg("+joinServer")
-    .arg(format!("{}", server_address))
+    .arg(server_address)
     .current_dir(game_path.parent().unwrap())
     .spawn()?;
 
@@ -88,19 +88,33 @@ fn run(config_file: &Path, server_address: &str) -> Result<(), Box<dyn error::Er
     Ok(())
 }
 
+fn restart_elevated(current_executable: &Path) -> Result<(), String>
+{
+    //use winapi::um::shellapi::{ShellExecuteW, SHELLEXECUTEINFOW};
+    print!("Restarting elevated! {}", current_executable.to_str().unwrap());
+    Ok(())
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     let current_executable = Path::new(&args[0]);
     if args.len() < 2 
     { 
-        match show_message_box(&format!("Starting first time install"), true).unwrap()
+        use is_elevated::is_elevated;
+        if !is_elevated() 
         {
-            2 => 
+            show_message_box("Need to be elevated to run install", false).unwrap();
+            match restart_elevated(&current_executable)
             {
-                // Cancelled
-                exit(1);
-            },
-            _ => ()
+                Ok(_) => exit(0),
+                Err(_) => exit(1)
+            }
+        }
+
+        if let 2 = show_message_box("Starting first time install", true).unwrap()
+        {
+            // Cancelled
+            exit(1);
         };
 
         match install::install(&current_executable)
@@ -112,10 +126,8 @@ fn main() {
                 exit(1);
             }
         };
-        ()
     }
-    else
-    {
+    else {
         let current_dir = current_executable.parent().unwrap();
         let config_file = current_dir.join("config.toml");
         let server = match parse_url(&args[1])

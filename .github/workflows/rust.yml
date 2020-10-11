@@ -14,8 +14,17 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@v2
+    - name: Checkout
+      uses: actions/checkout@v2
     - name: Setup toolchain
       run: rustup target add i686-pc-windows-msvc
     - name: Build release
       run: cargo build --target=i686-pc-windows-msvc --release
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: bftracks-launcer-32bit
+        path: |
+          target\i686-pc-windows-msvc\release\*.exe
+          target\i686-pc-windows-msvc\release\*.pdb

@@ -61,8 +61,7 @@ fn get_app_data_directory() -> Result<PathBuf, String>
                 CoTaskMemFree(path_ptr as *mut winapi::ctypes::c_void);
                 Ok(PathBuf::from(ostr).join("BFTracks"))
         }
-        else
-        {
+        else {
             Err("Failed to get app data directory".to_string())
         }
     }
@@ -100,14 +99,14 @@ Computer\HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Origin\Battlefield 1942
 
     match wfd::open_dialog(params) {
         Ok(r) => {
-            Ok(PathBuf::from(r.selected_file_path))
+            Ok(r.selected_file_path)
         }
         Err(e) => match e {
             DialogError::UserCancelled => {
-                return Err("Cancelled".to_string())
+                Err("Cancelled".to_string())
             }
             DialogError::HResultFailed { hresult, error_method } => {
-                return Err(format!("HResult Failed - HRESULT: {:X}, Method: {}", hresult, error_method))
+                Err(format!("HResult Failed - HRESULT: {:X}, Method: {}", hresult, error_method))
             }
         },
     }
