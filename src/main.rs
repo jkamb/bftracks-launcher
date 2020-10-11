@@ -118,6 +118,7 @@ fn main() {
             Err(err) =>
             {
                 show_message_box(&(*err).to_string()).unwrap();
+                exit(1);
             }
         }
     }
