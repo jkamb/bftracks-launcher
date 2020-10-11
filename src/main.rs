@@ -40,21 +40,27 @@ fn to_wstring(value: &str) -> Vec<u16> {
         .collect()
 }
 
-fn show_message_box(message: &str) -> Result<i32, io::Error>
+fn show_message_box(message: &str, cancellable: bool) -> Result<i32, io::Error>
 {
     use std::ptr::null_mut;
-    use winapi::um::winuser::{MessageBoxW, MB_ICONINFORMATION, MB_OK};
+    use winapi::um::winuser::{MessageBoxW, MB_ICONINFORMATION, MB_OK, MB_OKCANCEL};
 
     let lp_text = to_wstring(message);
     let lp_caption = to_wstring("BFTracks launcher");
+    let style = match cancellable
+    {
+        true => MB_OKCANCEL | MB_ICONINFORMATION,
+        false => MB_OK | MB_ICONINFORMATION
+    };
     let ret = unsafe {
         MessageBoxW(
             null_mut(),          // hWnd
             lp_text.as_ptr(),    // text
             lp_caption.as_ptr(), // caption (dialog box title)
-            MB_OK | MB_ICONINFORMATION,
+            style,
         )
     };
+
     if ret == 0 {
         Err(io::Error::last_os_error())
     } else {
@@ -87,13 +93,22 @@ fn main() {
     let current_executable = Path::new(&args[0]);
     if args.len() < 2 
     { 
-        show_message_box(&format!("Starting first time install")).unwrap();
+        match show_message_box(&format!("Starting first time install"), true).unwrap()
+        {
+            2 => 
+            {
+                // Cancelled
+                exit(1);
+            },
+            _ => ()
+        };
+
         match install::install(&current_executable)
         {
-            Ok(_) => show_message_box("Install successful!").unwrap(),
+            Ok(_) => show_message_box("Install successful!", false).unwrap(),
             Err(err) =>
             {
-                show_message_box(&format!("Install error: {}", err)).unwrap();
+                show_message_box(&format!("Install error: {}", err), false).unwrap();
                 exit(1);
             }
         };
@@ -108,7 +123,7 @@ fn main() {
             Ok(server) => server,
             Err(err) =>
             {
-                show_message_box(&format!("Error parsing URL: {}", err)).unwrap();
+                show_message_box(&format!("Error parsing URL: {}", err), false).unwrap();
                 exit(1);
             } 
         };
@@ -117,7 +132,7 @@ fn main() {
             Ok(_) => (),
             Err(err) =>
             {
-                show_message_box(&(*err).to_string()).unwrap();
+                show_message_box(&(*err).to_string(), false).unwrap();
                 exit(1);
             }
         }
