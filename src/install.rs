@@ -79,7 +79,13 @@ Computer\HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Origin\Battlefield 1942
 
     let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
     let key = hklm.open_subkey("SOFTWARE\\WOW6432Node\\Origin\\Battlefield 1942").map_err(|e| e.to_string())?;
-    let install_dir: String = key.get_value("InstallDir").map_err(|e| e.to_string())?;
+
+    // Try to find Origin installation as a base for user to select the game exe, otherwise default to a known path
+    let install_dir: String = match key.get_value("InstallDir")
+    {
+        Ok(dir) => dir,
+        Err(_) => "C:\\".to_string()
+    };
 
     let params = DialogParams {
         file_types: vec![("Executable Files", "BF1942.exe")],
@@ -127,7 +133,11 @@ fn write_config(app_dir: &Path, executable: &Path) -> Result<(), String>
 fn copy_self(current_exe: &Path, app_dir: &Path) -> Result<(), String>
 {
     use std::fs;
-
+    
+    if !app_dir.exists()
+    {
+        fs::create_dir(app_dir).map_err(|e| e.to_string())?;
+    }
     let copy_location = app_dir.join(current_exe.file_name().unwrap());
     fs::copy(current_exe, copy_location).map_err(|e| e.to_string())?;
     Ok(())
