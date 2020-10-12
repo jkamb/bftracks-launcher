@@ -17,7 +17,11 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v2
     - name: Setup toolchain
-      run: rustup target add i686-pc-windows-msvc
+      run: |
+        rustup target add i686-pc-windows-msvc
+        rustup component add clippy
+    - name: Run clippy
+      run: cargo clippy -- -D warnings
     - name: Build release
       run: cargo build --target=i686-pc-windows-msvc --release
 
