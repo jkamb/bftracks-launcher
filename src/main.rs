@@ -90,8 +90,46 @@ fn run(config_file: &Path, server_address: &str) -> Result<(), Box<dyn error::Er
 
 fn restart_elevated(current_executable: &Path) -> Result<(), String>
 {
-    //use winapi::um::shellapi::{ShellExecuteW, SHELLEXECUTEINFOW};
-    print!("Restarting elevated! {}", current_executable.to_str().unwrap());
+    use winapi::um::shellapi::{ShellExecuteExW, SEE_MASK_NOASYNC, SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW};
+    use winapi::um::synchapi::WaitForSingleObject;
+    use winapi::um::winbase::INFINITE;
+    use std::mem;
+    use std::ptr;
+
+    println!("Restarting elevated! {}", current_executable.to_str().unwrap());
+    let file = to_wstring(&current_executable.to_str().unwrap());
+    let operation = to_wstring("runas");
+    let n_show_cmd = 10;
+    let mut info = SHELLEXECUTEINFOW {
+        cbSize: 0,
+        fMask: SEE_MASK_NOASYNC | SEE_MASK_NOCLOSEPROCESS,
+        hwnd: ptr::null_mut(),
+        lpVerb: operation.as_ptr(),
+        lpFile: file.as_ptr(),
+        lpParameters: ptr::null_mut(),
+        lpDirectory: ptr::null_mut(),
+        nShow: n_show_cmd,
+        hInstApp: ptr::null_mut(),
+        lpIDList: ptr::null_mut(),
+        lpClass: ptr::null_mut(),
+        hkeyClass: ptr::null_mut(),
+        dwHotKey: 0,
+        hMonitor: ptr::null_mut(),
+        hProcess: ptr::null_mut(),
+    };
+    info.cbSize = mem::size_of_val(&info) as u32;
+    unsafe
+    {
+        let result = ShellExecuteExW(&mut info);
+        if result == 0
+        {
+            return Err("ShellExecute failed!".to_string());
+        }
+        else
+        {
+            WaitForSingleObject(info.hProcess, INFINITE);
+        }
+    }
     Ok(())
 }
 
@@ -113,6 +151,7 @@ fn main() {
 
         if let 2 = show_message_box("Starting first time install", true).unwrap()
         {
+            println!("Cancelled");
             // Cancelled
             exit(1);
         };
