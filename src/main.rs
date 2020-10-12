@@ -1,4 +1,5 @@
 #![windows_subsystem = "windows"]
+#![allow(clippy::suspicious_else_formatting)]
 use std::env;
 use std::process::{exit,Command};
 use std::path::Path;
@@ -63,7 +64,8 @@ fn show_message_box(message: &str, cancellable: bool) -> Result<i32, io::Error>
 
     if ret == 0 {
         Err(io::Error::last_os_error())
-    } else {
+    } else
+    {
         Ok(ret)
     }
 }
@@ -151,7 +153,6 @@ fn main() {
 
         if let 2 = show_message_box("Starting first time install", true).unwrap()
         {
-            println!("Cancelled");
             // Cancelled
             exit(1);
         };

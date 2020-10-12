@@ -1,3 +1,4 @@
+#![allow(clippy::suspicious_else_formatting)]
 use std::path::{Path, PathBuf};
 use std::ffi::OsString;
 use std::slice;
@@ -61,7 +62,8 @@ fn get_app_data_directory() -> Result<PathBuf, String>
                 CoTaskMemFree(path_ptr as *mut winapi::ctypes::c_void);
                 Ok(PathBuf::from(ostr).join("BFTracks"))
         }
-        else {
+        else 
+        {
             Err("Failed to get app data directory".to_string())
         }
     }
