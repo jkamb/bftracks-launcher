@@ -1,5 +1,4 @@
 #![windows_subsystem = "windows"]
-#![allow(clippy::suspicious_else_formatting)]
 use std::env;
 use std::process::{exit,Command};
 use std::path::Path;
@@ -7,7 +6,7 @@ use std::fs;
 use std::io;
 use std::time::Duration;
 use std::error;
-use url::{Url, ParseError};
+use url::Url;
 
 mod install;
 mod config;
@@ -15,18 +14,23 @@ mod config;
 use wait_timeout::ChildExt;
 
 
-fn parse_url(arg: &str) -> Result<String, ParseError>
+fn parse_url(arg: &str) -> Result<String, String>
 {
-    let bftracks_url = Url::parse(arg)?;
+    let bftracks_url = Url::parse(arg).map_err(|e| e.to_string())?;
+    if let false = bftracks_url.scheme().eq("bftracks")
+    {
+        return Err(format!("Invalid scheme {}",bftracks_url.scheme()))
+    };
+
     let host = match bftracks_url.host_str()
     {
         Some(host) => host,
-        None => return Err(ParseError::EmptyHost)
+        None => return Err("Empty hostname".into())
     };
     let port = match bftracks_url.port()
     {
         Some(port) => port,
-        None => return Err(ParseError::InvalidPort)
+        None => return Err("Invalid port".into())
     };
     Ok(format!("{}:{}", host, port))
 }
@@ -64,8 +68,7 @@ fn show_message_box(message: &str, cancellable: bool) -> Result<i32, io::Error>
 
     if ret == 0 {
         Err(io::Error::last_os_error())
-    } else
-    {
+    } else {
         Ok(ret)
     }
 }
@@ -90,7 +93,7 @@ fn run(config_file: &Path, server_address: &str) -> Result<(), Box<dyn error::Er
     Ok(())
 }
 
-fn restart_elevated(current_executable: &Path) -> Result<(), String>
+fn restart_elevated(current_executable: &Path, args: Option<String>) -> Result<(), String>
 {
     use winapi::um::shellapi::{ShellExecuteExW, SEE_MASK_NOASYNC, SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW};
     use winapi::um::synchapi::WaitForSingleObject;
@@ -101,6 +104,10 @@ fn restart_elevated(current_executable: &Path) -> Result<(), String>
     println!("Restarting elevated! {}", current_executable.to_str().unwrap());
     let file = to_wstring(&current_executable.to_str().unwrap());
     let operation = to_wstring("runas");
+    let parameters: Vec<u16> = match args {
+        Some(arg) => to_wstring(&arg),
+        None => std::iter::once(0u16).collect()
+    };
     let n_show_cmd = 10;
     let mut info = SHELLEXECUTEINFOW {
         cbSize: 0,
@@ -108,7 +115,7 @@ fn restart_elevated(current_executable: &Path) -> Result<(), String>
         hwnd: ptr::null_mut(),
         lpVerb: operation.as_ptr(),
         lpFile: file.as_ptr(),
-        lpParameters: ptr::null_mut(),
+        lpParameters: parameters.as_ptr(),
         lpDirectory: ptr::null_mut(),
         nShow: n_show_cmd,
         hInstApp: ptr::null_mut(),
@@ -123,12 +130,10 @@ fn restart_elevated(current_executable: &Path) -> Result<(), String>
     unsafe
     {
         let result = ShellExecuteExW(&mut info);
-        if result == 0
-        {
+        if result == 0 {
             return Err("ShellExecute failed!".to_string());
         }
-        else
-        {
+        else {
             WaitForSingleObject(info.hProcess, INFINITE);
         }
     }
@@ -138,13 +143,21 @@ fn restart_elevated(current_executable: &Path) -> Result<(), String>
 fn main() {
     let args: Vec<String> = env::args().collect();
     let current_executable = Path::new(&args[0]);
-    if args.len() < 2 
-    { 
-        use is_elevated::is_elevated;
-        if !is_elevated() 
+    if args[0].eq("bftracker-launcher-self-delete.exe") { 
+        match install::self_delete()
         {
-            show_message_box("Need to be elevated to run install", false).unwrap();
-            match restart_elevated(&current_executable)
+            Ok(_) => show_message_box("Uninstall successful!", false).unwrap(),
+            Err(err) =>
+            {
+                show_message_box(&format!("Uninstall error: {}", err), false).unwrap();
+                exit(1);
+            }
+        };
+    }
+
+    if args.len() < 2 { 
+        if !is_elevated::is_elevated() {
+            match restart_elevated(&current_executable, None)
             {
                 Ok(_) => exit(0),
                 Err(_) => exit(1)
@@ -154,7 +167,7 @@ fn main() {
         if let 2 = show_message_box("Starting first time install", true).unwrap()
         {
             // Cancelled
-            exit(1);
+            exit(0);
         };
 
         match install::install(&current_executable)
@@ -166,6 +179,26 @@ fn main() {
                 exit(1);
             }
         };
+    }
+    else if args[1].eq("uninstall") {
+        if !is_elevated::is_elevated() {
+            match restart_elevated(&current_executable, Some("uninstall".to_owned())) {
+                Ok(_) => exit(0),
+                Err(_) => exit(1)
+            }
+        }
+        if let 2 = show_message_box("Do you want to uninstall BFTracks launcher?", true).unwrap()
+        {
+            // Cancelled
+            exit(0);
+        };
+
+        match install::uninstall(&current_executable)
+        {
+            Ok(_) => show_message_box("Uninstall successful!", false).unwrap(),
+            Err(err) => show_message_box(&format!("Uninstall error: {}", err), false).unwrap()
+        };
+        exit(0);
     }
     else {
         let current_dir = current_executable.parent().unwrap();
