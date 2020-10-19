@@ -143,7 +143,8 @@ fn restart_elevated(current_executable: &Path, args: Option<String>) -> Result<(
 fn main() {
     let args: Vec<String> = env::args().collect();
     let current_executable = Path::new(&args[0]);
-    if args[0].eq("bftracker-launcher-self-delete.exe") { 
+    // TODO: Get app name from central location... maybe cargo file?!
+    if current_executable.file_name().unwrap().to_str().unwrap().eq("bftracks-launcher.exe-self-delete.exe") { 
         match install::self_delete()
         {
             Ok(_) => show_message_box("Uninstall successful!", false).unwrap(),
@@ -153,6 +154,7 @@ fn main() {
                 exit(1);
             }
         };
+        exit(0);
     }
 
     if args.len() < 2 { 
@@ -193,10 +195,9 @@ fn main() {
             exit(0);
         };
 
-        match install::uninstall(&current_executable)
+        if let Err(err) = install::uninstall(&current_executable)
         {
-            Ok(_) => show_message_box("Uninstall successful!", false).unwrap(),
-            Err(err) => show_message_box(&format!("Uninstall error: {}", err), false).unwrap()
+            show_message_box(&format!("Uninstall error: {}", err), false).unwrap();
         };
         exit(0);
     }

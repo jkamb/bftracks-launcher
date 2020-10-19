@@ -1,30 +1,29 @@
 use std::path::{Path, PathBuf};
 use std::ffi::OsString;
 use std::slice;
-use std::os::windows::prelude::OsStringExt;
+use std::ffi::OsStr;
 use super::config;
 
 mod native
 {
     use winapi::shared::ntdef::{NTSTATUS, HANDLE, PVOID, ULONG, PULONG, LONG};
     use winapi::shared::minwindef::DWORD;
-    extern "system" {
-        pub fn NtQueryInformationProcess(
-            ProcessHandle: HANDLE,
-            ProcessInformationClass: DWORD,
-            ProcessInformation: PVOID,
-            ProcessInformationLength: ULONG,
-            ReturnLength: PULONG,
-        ) -> NTSTATUS;
-    }
+    pub type FnNtQueryInformationProcess = unsafe extern "C" fn (
+        ProcessHandle: HANDLE,
+        ProcessInformationClass: DWORD,
+        ProcessInformation: PVOID,
+        ProcessInformationLength: ULONG,
+        ReturnLength: PULONG,
+    ) -> NTSTATUS;
 
+    #[repr(C)]
     pub struct PROCESS_BASIC_INFORMATION {
-        pub ExitStatus : NTSTATUS,
+        pub ExitStatus : LONG,
         pub PebBaseAddress : PVOID, // Should be a PPEB but any pointer to get the correct size should work for now
         pub AffinityMask : PULONG,
         pub BasePriority : LONG,
-        pub UniqueProcessId : ULONG,
-        pub InheritedFromUniqueProcessId : ULONG,
+        pub UniqueProcessId : PULONG,
+        pub InheritedFromUniqueProcessId : PULONG,
     }
 }
 
@@ -97,6 +96,7 @@ fn get_app_data_directory() -> Result<PathBuf, String>
     use winapi::um::winnt::PWSTR;
     use winapi::shared::winerror;
     use winapi::um::winbase::lstrlenW;
+    use std::os::windows::prelude::OsStringExt;
     use std::ptr;
 
     unsafe 
@@ -198,8 +198,8 @@ fn cleanup_registry() -> Result<(), String>
     use winreg::enums::*;
 
     let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
-    hklm.delete_subkey_all("SOFTWARE\\Classes\\bftracks").map_err(|e| e.to_string())?;
-    hklm.delete_subkey_all("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\BFTracks").map_err(|e| e.to_string())?;
+    let _ = hklm.delete_subkey_all("SOFTWARE\\Classes\\bftracks");
+    let _ = hklm.delete_subkey_all("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\BFTracks");
     Ok(())
 }
 
@@ -207,7 +207,7 @@ pub fn self_delete() -> Result<(), String>
 {
     use std::fs;
     use std::process::{Command, Stdio};
-    use native::{NtQueryInformationProcess, PROCESS_BASIC_INFORMATION};
+    use native::{FnNtQueryInformationProcess, PROCESS_BASIC_INFORMATION};
     use winapi::um::synchapi::WaitForSingleObject;
     use winapi::shared::minwindef::DWORD;
     use winapi::um::processthreadsapi::{GetCurrentProcess, OpenProcess};
@@ -215,16 +215,25 @@ pub fn self_delete() -> Result<(), String>
     use winapi::um::winnt::SYNCHRONIZE;
     use winapi::shared::ntdef::{ULONG, PVOID};
     use winapi::um::winbase::{INFINITE, WAIT_OBJECT_0};
+    use winapi::um::libloaderapi;
+    use winapi::um::winnt::LPCSTR;
+    use std::os::windows::ffi::OsStrExt;
     use std::mem;
 
     unsafe {
         let own_handle = GetCurrentProcess();
-        if own_handle == INVALID_HANDLE_VALUE {
-            return Err("Failed to get handle of current process".to_owned());
-        }
         let mut process_basic_info : PROCESS_BASIC_INFORMATION = mem::zeroed();
         let process_basic_info_length = mem::size_of::<PROCESS_BASIC_INFORMATION>() as ULONG;
         let mut return_length : ULONG = 0;
+        // Import NtQueryInformationProcess
+        let filename: Vec<u16> = OsStr::new("ntdll").encode_wide().chain(Some(0)).collect();
+        let handle = libloaderapi::LoadLibraryW(filename.as_ptr());
+        if handle.is_null() {
+            return Err("Failed to import ntdll".to_owned());
+        }
+        let fn_address = libloaderapi::GetProcAddress(handle, "NtQueryInformationProcess\0".as_ptr() as LPCSTR);
+        let NtQueryInformationProcess: FnNtQueryInformationProcess = mem::transmute(fn_address);
+
         let status = NtQueryInformationProcess(own_handle, 0, &mut process_basic_info as *mut _  as PVOID, process_basic_info_length, &mut return_length);
         if status >= 0 {
             let parent = OpenProcess(SYNCHRONIZE, 0, process_basic_info.InheritedFromUniqueProcessId as DWORD);
@@ -273,7 +282,7 @@ fn delete_exe_and_app_dir(current_exe: &Path) -> Result<(), String>
     use std::os::windows::ffi::OsStrExt;
 
     // This is inspired by rustup's way of self-deleting
-    let work_path = current_exe.parent().expect("No parent found for app directory");
+    let work_path = current_exe.parent().unwrap().parent().expect("No parent found for app directory");
     let self_delete_exe = work_path.join(&format!("{}-self-delete.exe", current_exe.file_name().unwrap().to_str().unwrap()));
     let self_delete_exe_raw: Vec<u16> = self_delete_exe.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
     fs::copy(&current_exe, &self_delete_exe).map_err(|e| e.to_string())?;
