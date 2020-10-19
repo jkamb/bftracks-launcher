@@ -144,7 +144,7 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     let current_executable = Path::new(&args[0]);
     // TODO: Get app name from central location... maybe cargo file?!
-    if current_executable.file_name().unwrap().to_str().unwrap().eq("bftracks-launcher.exe-self-delete.exe") { 
+    if current_executable.file_name().unwrap().to_str().unwrap().eq("bftracks-launcher-self-delete.exe") { 
         match install::self_delete()
         {
             Ok(_) => show_message_box("Uninstall successful!", false).unwrap(),

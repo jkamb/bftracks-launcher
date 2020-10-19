@@ -211,7 +211,7 @@ pub fn self_delete() -> Result<(), String>
     use winapi::um::synchapi::WaitForSingleObject;
     use winapi::shared::minwindef::DWORD;
     use winapi::um::processthreadsapi::{GetCurrentProcess, OpenProcess};
-    use winapi::um::handleapi::{CloseHandle, INVALID_HANDLE_VALUE};
+    use winapi::um::handleapi::{CloseHandle};
     use winapi::um::winnt::SYNCHRONIZE;
     use winapi::shared::ntdef::{ULONG, PVOID};
     use winapi::um::winbase::{INFINITE, WAIT_OBJECT_0};
@@ -283,7 +283,7 @@ fn delete_exe_and_app_dir(current_exe: &Path) -> Result<(), String>
 
     // This is inspired by rustup's way of self-deleting
     let work_path = current_exe.parent().unwrap().parent().expect("No parent found for app directory");
-    let self_delete_exe = work_path.join(&format!("{}-self-delete.exe", current_exe.file_name().unwrap().to_str().unwrap()));
+    let self_delete_exe = work_path.join(&format!("{}-self-delete.exe", current_exe.file_stem().unwrap().to_str().unwrap()));
     let self_delete_exe_raw: Vec<u16> = self_delete_exe.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
     fs::copy(&current_exe, &self_delete_exe).map_err(|e| e.to_string())?;
 
