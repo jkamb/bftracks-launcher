@@ -17,6 +17,7 @@ mod native
     ) -> NTSTATUS;
 
     #[repr(C)]
+    #[allow(non_snake_case)]
     pub struct PROCESS_BASIC_INFORMATION {
         pub ExitStatus : LONG,
         pub PebBaseAddress : PVOID, // Should be a PPEB but any pointer to get the correct size should work for now
@@ -232,6 +233,7 @@ pub fn self_delete() -> Result<(), String>
             return Err("Failed to import ntdll".to_owned());
         }
         let fn_address = libloaderapi::GetProcAddress(handle, "NtQueryInformationProcess\0".as_ptr() as LPCSTR);
+        #[allow(non_snake_case)]
         let NtQueryInformationProcess: FnNtQueryInformationProcess = mem::transmute(fn_address);
 
         let status = NtQueryInformationProcess(own_handle, 0, &mut process_basic_info as *mut _  as PVOID, process_basic_info_length, &mut return_length);
@@ -288,7 +290,7 @@ fn delete_exe_and_app_dir(current_exe: &Path) -> Result<(), String>
     fs::copy(&current_exe, &self_delete_exe).map_err(|e| e.to_string())?;
 
     let mut security_attribute = SECURITY_ATTRIBUTES {
-        nLength: mem::size_of::<SECURITY_ATTRIBUTES> as DWORD,
+        nLength: mem::size_of::<SECURITY_ATTRIBUTES> as usize as DWORD,
         lpSecurityDescriptor: ptr::null_mut(),
         bInheritHandle: 1,
     };
