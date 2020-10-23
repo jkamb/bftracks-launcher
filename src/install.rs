@@ -252,6 +252,7 @@ pub fn self_delete() -> Result<(), String>
                 let app_dir = get_app_data_directory()?;
                 fs::remove_dir_all(app_dir).map_err(|e| e.to_string())?;
 
+                // Have to exit quickly after this so this exe is not mapped when net exits
                 Command::new("net")
                 .stdin(Stdio::null())
                 .stdout(Stdio::null())
@@ -290,7 +291,7 @@ fn delete_exe_and_app_dir(current_exe: &Path) -> Result<(), String>
     fs::copy(&current_exe, &self_delete_exe).map_err(|e| e.to_string())?;
 
     let mut security_attribute = SECURITY_ATTRIBUTES {
-        nLength: mem::size_of::<SECURITY_ATTRIBUTES> as usize as DWORD,
+        nLength: mem::size_of::<SECURITY_ATTRIBUTES>() as DWORD,
         lpSecurityDescriptor: ptr::null_mut(),
         bInheritHandle: 1,
     };
@@ -318,7 +319,7 @@ fn delete_exe_and_app_dir(current_exe: &Path) -> Result<(), String>
     Command::new(self_delete_exe).spawn().map_err(|e| e.to_string())?;
     
     // Sleep for the new process to get created
-    thread::sleep(Duration::from_millis(100));
+    thread::sleep(Duration::from_millis(200));
     Ok(())
 }
 
