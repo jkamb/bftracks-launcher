@@ -128,12 +128,12 @@ Computer\HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Origin\Battlefield 1942
     use winreg::enums::*;
 
     let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
-    let key = hklm.open_subkey("SOFTWARE\\WOW6432Node\\Origin\\Battlefield 1942").map_err(|e| e.to_string())?;
-
     // Try to find Origin installation as a base for user to select the game exe, otherwise default to a known path
-    let install_dir: String = match key.get_value("InstallDir")
+    let install_dir: String = match hklm.open_subkey("SOFTWARE\\WOW6432Node\\Origin\\Battlefield 1942")
     {
-        Ok(dir) => dir,
+        Ok(key) => {
+            if let Ok(dir) = key.get_value("InstallDir"){ dir } else { "C:\\".to_string() }
+        },
         Err(_) => "C:\\".to_string()
     };
 
