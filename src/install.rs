@@ -294,7 +294,7 @@ fn delete_exe_and_app_dir(current_exe: &Path) -> Result<()> {
         .parent()
         .unwrap()
         .parent()
-        .ok_or(anyhow!("No parent found for app directory"))?;
+        .ok_or_else(|| anyhow!("No parent found for app directory"))?;
 
     let self_delete_exe = work_path.join(&format!(
         "{}-self-delete.exe",
