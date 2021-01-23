@@ -1,28 +1,32 @@
 [package]
+authors = ["Johan Kamb <johan@kamb.me>"]
+build = "build.rs"
+edition = "2018"
 name = "bftracks-launcher"
 version = "0.1.0"
-authors = ["Johan Kamb <johan@kamb.me>"]
-edition = "2018"
-build = "build.rs"
 
-[package.metadata.winres]
-LegalCopyright = "Copyright © 2020"
+[metadata]
+[metadata.winres]
 FileDescription = "BFTracks"
 InternalName = "BFTracks"
-ProductName = "BFTracks"
+LegalCopyright = "Copyright © 2021"
 OriginalFileName = "bftracks-launcher.exe"
-
-[dependencies]
-url = "2.1.1" 
-winapi = { version = "0.3.9", features = ["winbase", "winuser", "shlobj", "combaseapi", "knownfolders", "shellapi", "synchapi", "libloaderapi"] }
-winreg = "0.7.0"
-wfd = "0.1.4"
-is_elevated = "0.1.2"
-wait-timeout = "0.2.0"
-toml = "0.5.6"
-serde = "1.0.97"
-serde_derive = "1.0"
-scopeguard = "1.1.0"
-
+ProductName = "BFTracks"
 [build-dependencies]
 winres = "0.1.11"
+
+[dependencies]
+anyhow = "1.0.38"
+is_elevated = "0.1.2"
+scopeguard = "1.1.0"
+serde = "1.0.97"
+serde_derive = "1.0"
+toml = "0.5.6"
+url = "2.1.1"
+wait-timeout = "0.2.0"
+wfd = "0.1.4"
+winreg = "0.7.0"
+
+[dependencies.winapi]
+features = ["winbase", "winuser", "shlobj", "combaseapi", "knownfolders", "shellapi", "synchapi", "libloaderapi"]
+version = "0.3.9"

@@ -1,9 +1,6 @@
-
-use serde_derive::{Serialize, Deserialize};
-
+use serde_derive::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize)]
-pub struct Config
-{
+pub struct Config {
     #[serde(rename = "GamePath")]
-    pub game_path: String
+    pub game_path: String,
 }
