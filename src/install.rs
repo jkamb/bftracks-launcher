@@ -1,4 +1,5 @@
 use super::config;
+use anyhow::{anyhow, Result};
 use std::ffi::OsStr;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
@@ -39,7 +40,7 @@ mod native {
 [HKEY_LOCAL_MACHINE\SOFTWARE\Classes\bftracks\shell\open\command]
 @="\"D:\git\bftracks-launcher\target\release\bftracks-launcher.exe\"" \"%1\""
 */
-fn setup_registry(launcher_path: &Path) -> Result<(), String> {
+fn setup_registry(launcher_path: &Path) -> Result<()> {
     use winreg::enums::*;
     use winreg::RegKey;
 
@@ -47,24 +48,18 @@ fn setup_registry(launcher_path: &Path) -> Result<(), String> {
     let launcher_dir = launcher_path.parent().unwrap().to_str().unwrap();
     if let Some(launcher_path) = launcher_path.to_str() {
         // Setup custom scheme
-        let (key, disp) = hklm
-            .create_subkey("SOFTWARE\\Classes\\bftracks\\shell\\open\\command")
-            .map_err(|e| e.to_string())?;
+        let (key, disp) =
+            hklm.create_subkey("SOFTWARE\\Classes\\bftracks\\shell\\open\\command")?;
         match disp {
             REG_CREATED_NEW_KEY => {
                 println!("A new key has been created, checking & fixing up parent");
-                let (key, _) = hklm
-                    .create_subkey("SOFTWARE\\Classes\\bftracks")
-                    .map_err(|e| e.to_string())?;
-                key.set_value("", &"BFTracks launcher")
-                    .map_err(|e| e.to_string())?;
-                key.set_value("URL Protocol", &"")
-                    .map_err(|e| e.to_string())?;
+                let (key, _) = hklm.create_subkey("SOFTWARE\\Classes\\bftracks")?;
+                key.set_value("", &"BFTracks launcher")?;
+                key.set_value("URL Protocol", &"")?;
             }
             REG_OPENED_EXISTING_KEY => println!("An existing key has been opened"),
         }
-        key.set_value("", &format!("{} \"%1\"", launcher_path))
-            .map_err(|e| e.to_string())?;
+        key.set_value("", &format!("{} \"%1\"", launcher_path))?;
 
         /*
             Windows Registry Editor Version 5.00
@@ -79,28 +74,20 @@ fn setup_registry(launcher_path: &Path) -> Result<(), String> {
         */
         // Setup uninstall key
         let (key, _) = hklm
-            .create_subkey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\BFTracks")
-            .map_err(|e| e.to_string())?;
-        key.set_value("UninstallString", &format!("{} uninstall", launcher_path))
-            .map_err(|e| e.to_string())?;
-        key.set_value("DisplayIcon", &launcher_path)
-            .map_err(|e| e.to_string())?;
-        key.set_value("DisplayName", &"BFTracks launcher")
-            .map_err(|e| e.to_string())?;
-        key.set_value("URLInfoAbout", &"http://bftracks.net")
-            .map_err(|e| e.to_string())?;
-        key.set_value("InstallLocation", &launcher_dir)
-            .map_err(|e| e.to_string())?;
-        key.set_value("NoModify", &1u32)
-            .map_err(|e| e.to_string())?;
-        key.set_value("NoRepair", &1u32)
-            .map_err(|e| e.to_string())?;
+            .create_subkey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\BFTracks")?;
+        key.set_value("UninstallString", &format!("{} uninstall", launcher_path))?;
+        key.set_value("DisplayIcon", &launcher_path)?;
+        key.set_value("DisplayName", &"BFTracks launcher")?;
+        key.set_value("URLInfoAbout", &"http://bftracks.net")?;
+        key.set_value("InstallLocation", &launcher_dir)?;
+        key.set_value("NoModify", &1u32)?;
+        key.set_value("NoRepair", &1u32)?;
         return Ok(());
     }
-    Err("Failed to setup registry".to_owned())
+    Err(anyhow!("Failed to setup registry"))
 }
 
-fn get_app_data_directory() -> Result<PathBuf, String> {
+fn get_app_data_directory() -> Result<PathBuf> {
     use std::os::windows::prelude::OsStringExt;
     use std::ptr;
     use winapi::shared::winerror;
@@ -121,12 +108,12 @@ fn get_app_data_directory() -> Result<PathBuf, String> {
             CoTaskMemFree(path_ptr as *mut winapi::ctypes::c_void);
             Ok(PathBuf::from(ostr).join("BFTracks"))
         } else {
-            Err("Failed to get app data directory".to_string())
+            Err(anyhow!("Failed to get app data directory"))
         }
     }
 }
 
-fn get_bf1942_path() -> Result<PathBuf, String> {
+fn get_bf1942_path() -> Result<PathBuf> {
     /*
     Computer\HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Origin\Battlefield 1942
     */
@@ -165,19 +152,20 @@ fn get_bf1942_path() -> Result<PathBuf, String> {
     match wfd::open_dialog(params) {
         Ok(r) => Ok(r.selected_file_path),
         Err(e) => match e {
-            DialogError::UserCancelled => Err("Cancelled".to_string()),
+            DialogError::UserCancelled => Err(anyhow!("Cancelled")),
             DialogError::HResultFailed {
                 hresult,
                 error_method,
-            } => Err(format!(
+            } => Err(anyhow!(
                 "HResult Failed - HRESULT: {:X}, Method: {}",
-                hresult, error_method
+                hresult,
+                error_method
             )),
         },
     }
 }
 
-fn write_config(app_dir: &Path, executable: &Path) -> Result<(), String> {
+fn write_config(app_dir: &Path, executable: &Path) -> Result<()> {
     use config::Config;
     use std::fs;
     use std::io::Write;
@@ -185,27 +173,25 @@ fn write_config(app_dir: &Path, executable: &Path) -> Result<(), String> {
     let cfg = Config {
         game_path: executable.to_string_lossy().to_string(),
     };
-    let toml = toml::to_string(&cfg).map_err(|e| e.to_string())?;
+    let toml = toml::to_string(&cfg)?;
     let config_path = app_dir.join("config.toml");
-    let mut config_file = fs::File::create(config_path).map_err(|e| e.to_string())?;
-    config_file
-        .write_all(toml.as_bytes())
-        .map_err(|e| e.to_string())?;
+    let mut config_file = fs::File::create(config_path)?;
+    config_file.write_all(toml.as_bytes())?;
     Ok(())
 }
 
-fn copy_self(current_exe: &Path, app_dir: &Path) -> Result<(), String> {
+fn copy_self(current_exe: &Path, app_dir: &Path) -> Result<()> {
     use std::fs;
 
     if !app_dir.exists() {
-        fs::create_dir(app_dir).map_err(|e| e.to_string())?;
+        fs::create_dir(app_dir)?;
     }
     let copy_location = app_dir.join(current_exe.file_name().unwrap());
-    fs::copy(current_exe, copy_location).map_err(|e| e.to_string())?;
+    fs::copy(current_exe, copy_location)?;
     Ok(())
 }
 
-fn cleanup_registry() -> Result<(), String> {
+fn cleanup_registry() -> Result<()> {
     use winreg::enums::*;
     use winreg::RegKey;
 
@@ -216,7 +202,7 @@ fn cleanup_registry() -> Result<(), String> {
     Ok(())
 }
 
-pub fn self_delete() -> Result<(), String> {
+pub fn self_delete() -> Result<()> {
     use native::{FnNtQueryInformationProcess, PROCESS_BASIC_INFORMATION};
     use std::fs;
     use std::mem;
@@ -241,7 +227,7 @@ pub fn self_delete() -> Result<(), String> {
         let filename: Vec<u16> = OsStr::new("ntdll").encode_wide().chain(Some(0)).collect();
         let handle = libloaderapi::LoadLibraryW(filename.as_ptr());
         if handle.is_null() {
-            return Err("Failed to import ntdll".to_owned());
+            return Err(anyhow!("Failed to import ntdll"));
         }
         let fn_address =
             libloaderapi::GetProcAddress(handle, "NtQueryInformationProcess\0".as_ptr() as LPCSTR);
@@ -268,28 +254,27 @@ pub fn self_delete() -> Result<(), String> {
 
                 let res = WaitForSingleObject(*parent, INFINITE);
                 if res != WAIT_OBJECT_0 {
-                    return Err("Error waiting for parent to close".to_owned());
+                    return Err(anyhow!("Error waiting for parent to close"));
                 }
 
                 let app_dir = get_app_data_directory()?;
-                fs::remove_dir_all(app_dir).map_err(|e| e.to_string())?;
+                fs::remove_dir_all(app_dir)?;
 
-                // Have to exit quickly after this so this exe is not mapped when net exits
+                // Have to exit quickly after this so the current exe is not mapped when net exits
                 Command::new("net")
                     .stdin(Stdio::null())
                     .stdout(Stdio::null())
                     .stderr(Stdio::null())
-                    .spawn()
-                    .map_err(|e| e.to_string())?;
+                    .spawn()?;
             } else {
-                return Err("Failed to open parent process".to_owned());
+                return Err(anyhow!("Failed to open parent process"));
             }
         }
     }
     Ok(())
 }
 
-fn delete_exe_and_app_dir(current_exe: &Path) -> Result<(), String> {
+fn delete_exe_and_app_dir(current_exe: &Path) -> Result<()> {
     use std::fs;
     use std::mem;
     use std::os::windows::ffi::OsStrExt;
@@ -309,7 +294,8 @@ fn delete_exe_and_app_dir(current_exe: &Path) -> Result<(), String> {
         .parent()
         .unwrap()
         .parent()
-        .expect("No parent found for app directory");
+        .ok_or(anyhow!("No parent found for app directory"))?;
+
     let self_delete_exe = work_path.join(&format!(
         "{}-self-delete.exe",
         current_exe.file_stem().unwrap().to_str().unwrap()
@@ -319,7 +305,7 @@ fn delete_exe_and_app_dir(current_exe: &Path) -> Result<(), String> {
         .encode_wide()
         .chain(std::iter::once(0))
         .collect();
-    fs::copy(&current_exe, &self_delete_exe).map_err(|e| e.to_string())?;
+    fs::copy(&current_exe, &self_delete_exe)?;
 
     let mut security_attribute = SECURITY_ATTRIBUTES {
         nLength: mem::size_of::<SECURITY_ATTRIBUTES>() as DWORD,
@@ -339,7 +325,7 @@ fn delete_exe_and_app_dir(current_exe: &Path) -> Result<(), String> {
         );
 
         if handle == INVALID_HANDLE_VALUE {
-            return Err("Failed to get handle to current file".to_owned());
+            return Err(anyhow!("Failed to get handle to current file"));
         }
 
         scopeguard::guard(handle, |h| {
@@ -347,23 +333,21 @@ fn delete_exe_and_app_dir(current_exe: &Path) -> Result<(), String> {
         })
     };
 
-    Command::new(self_delete_exe)
-        .spawn()
-        .map_err(|e| e.to_string())?;
+    Command::new(self_delete_exe).spawn()?;
 
     // Sleep for the new process to get created
     thread::sleep(Duration::from_millis(200));
     Ok(())
 }
 
-pub fn uninstall(current_exe: &Path) -> Result<(), String> {
+pub fn uninstall(current_exe: &Path) -> Result<()> {
     // Remove registry entries
     cleanup_registry()?;
     delete_exe_and_app_dir(current_exe)?;
     Ok(())
 }
 
-pub fn install(current_exe: &Path) -> Result<(), String> {
+pub fn install(current_exe: &Path) -> Result<()> {
     let app_dir = get_app_data_directory()?;
     copy_self(&current_exe, &app_dir)?;
 

@@ -1,6 +1,5 @@
 #![windows_subsystem = "windows"]
-use anyhow::{anyhow, Result};
-use install::uninstall;
+use anyhow::{anyhow, Context, Result};
 use std::env;
 use std::fs;
 use std::io;
@@ -67,7 +66,7 @@ fn show_message_box(message: &str, cancellable: bool) -> Result<i32> {
     }
 }
 
-fn run(config_file: &Path, server_address: &str) -> Result<()> {
+fn launch(config_file: &Path, server_address: &str) -> Result<()> {
     use config::Config;
 
     let config = fs::read_to_string(config_file.as_os_str())?;
@@ -127,7 +126,7 @@ fn restart_elevated(current_executable: &Path, args: Option<String>) -> Result<(
     unsafe {
         let result = ShellExecuteExW(&mut info);
         if result == 0 {
-            return Err(anyhow!("ShellExecute failed!"));
+            return Err(anyhow!("ShellExecute failed!").context("Failed to elevate launcher"));
         } else {
             WaitForSingleObject(info.hProcess, INFINITE);
         }
@@ -139,6 +138,7 @@ fn real_main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
     let current_executable = Path::new(&args[0]);
     // TODO: Get app name from central location... maybe cargo file?!
+    // Self deleter
     if current_executable
         .file_name()
         .unwrap()
@@ -146,14 +146,12 @@ fn real_main() -> Result<()> {
         .unwrap()
         .eq("bftracks-launcher-self-delete.exe")
     {
-        if let Err(err) = install::self_delete() {
-            show_message_box(&format!("Uninstall error: {}", err), false).unwrap();
-            exit(1);
-        };
+        install::self_delete().context("Self delete failed")?;
         exit(0);
     }
 
     if args.len() < 2 {
+        // First time install
         if !is_elevated::is_elevated() {
             match restart_elevated(&current_executable, None) {
                 Ok(_) => exit(0),
@@ -169,8 +167,7 @@ fn real_main() -> Result<()> {
         match install::install(&current_executable) {
             Ok(_) => show_message_box("Install successful!", false).unwrap(),
             Err(err) => {
-                show_message_box(&format!("Install error: {}", err), false).unwrap();
-                exit(1);
+                return Err(anyhow!(err).context("Install failed"));
             }
         };
     } else if args[1].eq("uninstall") {
@@ -185,27 +182,13 @@ fn real_main() -> Result<()> {
             exit(0);
         };
 
-        if let Err(err) = install::uninstall(&current_executable) {
-            show_message_box(&format!("Uninstall error: {}", err), false).unwrap();
-        };
+        install::uninstall(&current_executable).context("Uninstall failed")?;
         exit(0);
     } else {
         let current_dir = current_executable.parent().unwrap();
         let config_file = current_dir.join("config.toml");
-        let server = match parse_url(&args[1]) {
-            Ok(server) => server,
-            Err(err) => {
-                show_message_box(&format!("Error parsing URL: {}", err), false).unwrap();
-                exit(1);
-            }
-        };
-        match run(&config_file, &server) {
-            Ok(_) => (),
-            Err(err) => {
-                show_message_box(&(*err).to_string(), false).unwrap();
-                exit(1);
-            }
-        }
+        let server = parse_url(&args[1]).context("Failed to parse URL")?;
+        launch(&config_file, &server).context("Failed to launch game")?;
     }
     Ok(())
 }
