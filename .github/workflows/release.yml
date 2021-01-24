@@ -55,7 +55,7 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        upload_url: ${{ needs.publish-draft-release.outputs.asset_upload_url }}
+        upload_url: ${{ needs.create-draft-release.outputs.asset_upload_url }}
         asset_path: ./bftracks-launcher.exe
         asset_name: bftracks-launcher.exe
         asset_content_type: application/exe
