@@ -45,7 +45,7 @@ jobs:
         draft: true
   publish-release-build:
     runs-on: ubuntu-latest
-    needs: ["build"]
+    needs: ["create-draft-release"]
     steps:
     - uses: actions/download-artifact@v2
       with:
